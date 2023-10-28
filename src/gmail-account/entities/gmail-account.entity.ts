@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity('gmail-accounts')
+@Entity('gmail_accounts')
 export class GmailAccounts {
   @PrimaryGeneratedColumn('uuid')
   id: string;
