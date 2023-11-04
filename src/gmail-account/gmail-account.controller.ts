@@ -7,6 +7,8 @@ import {
   Param,
   ValidationPipe,
   UsePipes,
+  Get,
+  Query,
 } from '@nestjs/common';
 import { GmailAccountService } from './gmail-account.service';
 import { CreateGmailAccountDTO } from './dtos/create-gmail-account.dto';
@@ -25,5 +27,10 @@ export class GmailAccountController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateGmailAccountDTO) {
     return await this.gmailAccountService.update(id, dto);
+  }
+
+  @Get('webhook')
+  async getWebhook(@Query() query: { code: string; state: string }) {
+    return await this.gmailAccountService.getWebhook(query);
   }
 }
