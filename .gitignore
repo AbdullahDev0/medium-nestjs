@@ -37,3 +37,6 @@ lerna-debug.log*
 # Environment variables
 .env
 *.env
+
+# Credentials
+/src/shared/utils/Credentials/*.json
