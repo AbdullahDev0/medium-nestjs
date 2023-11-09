@@ -1,4 +1,23 @@
-// gmail-account.controller.ts
+/**
+ * Controller for Gmail Account operations.
+ *
+ * This controller handles HTTP requests related to Gmail accounts, such as
+ * creating and updating Gmail account details, and handling webhook callbacks.
+ * It uses the GmailAccountService for the business logic of each operation.
+ * The controller applies the HttpExceptionFilter for consistent error handling
+ * across all its routes and uses the ValidationPipe to ensure that incoming
+ * request data is correctly structured and validated.
+ *
+ * @class GmailAccountController
+ * @decorator Controller - Defines the base route for all endpoints in this controller.
+ * @decorator UseFilters - Applies the HttpExceptionFilter for error handling.
+ * @decorator UsePipes - Applies the ValidationPipe for data validation.
+ *
+ * @method create - Endpoint for creating a new Gmail account.
+ * @method update - Endpoint for updating an existing Gmail account by its ID.
+ * @method getWebhook - Endpoint to handle webhook callbacks with query parameters.
+ */
+
 import {
   Controller,
   Post,
@@ -9,23 +28,26 @@ import {
   UsePipes,
   Get,
   Query,
+  UseFilters,
 } from '@nestjs/common';
 import { GmailAccountService } from './gmail-account.service';
-import { CreateGmailAccountDTO } from './dtos/create-gmail-account.dto';
-import { UpdateGmailAccountDTO } from './dtos/update-gmail-account.dto';
+import { CreateGmailAccountDto } from './dtos/create-gmail-account.dto';
+import { UpdateGmailAccountDto } from './dtos/update-gmail-account.dto';
+import { HttpExceptionFilter } from '../shared/filters/http-exception.filter';
 
+@UseFilters(HttpExceptionFilter)
 @UsePipes(ValidationPipe)
 @Controller('gmail-accounts')
 export class GmailAccountController {
   constructor(private readonly gmailAccountService: GmailAccountService) {}
 
   @Post()
-  async create(@Body() dto: CreateGmailAccountDTO) {
+  async create(@Body() dto: CreateGmailAccountDto) {
     return await this.gmailAccountService.create(dto);
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateGmailAccountDTO) {
+  async update(@Param('id') id: string, @Body() dto: UpdateGmailAccountDto) {
     return await this.gmailAccountService.update(id, dto);
   }
 

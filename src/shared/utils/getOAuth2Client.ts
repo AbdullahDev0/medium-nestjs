@@ -2,6 +2,20 @@ import * as fs from 'fs';
 import { CREDENTIALS_PATH, GMAIL_CREDS } from '../utils/constants';
 import { google } from 'googleapis';
 
+/**
+ * Creates and returns an OAuth2 client using Google's API.
+ *
+ * This function reads the Google API credentials from a file and initializes
+ * an OAuth2 client. Optionally, it can also set the client's credentials
+ * if an access token is provided.
+ *
+ * @param {object | null} token - The token object containing access and refresh tokens.
+ *                                If provided, the OAuth2 client will be initialized with these credentials.
+ *                                Default value is null.
+ *
+ * @returns An instance of google.auth.OAuth2, configured with client credentials and,
+ *          optionally, with a provided token.
+ */
 export default function getOAuthClient(token: object | null = null) {
   const content = fs.readFileSync(CREDENTIALS_PATH + GMAIL_CREDS, 'utf-8');
   const credentials = JSON.parse(content);

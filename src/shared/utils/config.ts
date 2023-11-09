@@ -1,14 +1,16 @@
-import * as dotenv from 'dotenv'; // Import the dotenv library
-import * as fs from 'fs'; // Import the filesystem library
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 
+/**
+ * Loads environment-specific configurations.
+ *
+ * This function first determines the active environment (e.g., 'local', 'development', 'production').
+ * It then reads and parses the corresponding .env file (e.g., 'local.env', 'development.env').
+ * Finally, it assigns the values from this file to process.env, making them accessible throughout the application.
+ */
 export function loadConfig() {
-  // Ascertain the active environment, or default to 'local'
   const environment = process.env.NODE_ENV || 'local';
-
-  // Extract and interpret the .env file corresponding to the identified environment
   const data: any = dotenv.parse(fs.readFileSync(`${environment}.env`));
-
-  // Assign the extracted variables to process.env
   for (const key in data) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       process.env[key] = data[key];
