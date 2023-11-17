@@ -650,7 +650,7 @@ export class GmailAccountService {
     message: MessageInterface,
     headers: gmail_v1.Schema$MessagePartHeader[],
     attachments: AttachmentsResponseInterface[],
-  ) {
+  ): ThreadInterface {
     return {
       account_id: id,
       subject: headers.find(
@@ -728,7 +728,6 @@ export class GmailAccountService {
    */
   private decodeBody(encodedBody: string): string {
     if (!encodedBody) return '';
-
     const buff = Buffer.from(
       encodedBody.replace(/-/g, '+').replace(/_/g, '/'),
       'base64',
