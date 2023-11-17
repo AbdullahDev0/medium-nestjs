@@ -20,9 +20,10 @@ import { GmailAccountController } from './gmail-account.controller';
 import { GmailAccountService } from './gmail-account.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GmailAccounts } from './entities/gmail-account.entity';
+import { GmailThreads } from './entities/gmail-thread.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GmailAccounts])],
+  imports: [TypeOrmModule.forFeature([GmailAccounts, GmailThreads])],
   controllers: [GmailAccountController],
   providers: [GmailAccountService],
 })

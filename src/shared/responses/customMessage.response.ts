@@ -1,4 +1,4 @@
-import { responseMessageInterface } from '../utils/interfaces';
+import { ResponseMessageInterface } from '../utils/interfaces';
 
 /**
  * Constructs a response message object.
@@ -16,7 +16,7 @@ function customMessage(
   statusCode: number,
   message: string,
   data = {},
-): responseMessageInterface {
+): ResponseMessageInterface {
   return {
     statusCode: statusCode,
     message: [message],

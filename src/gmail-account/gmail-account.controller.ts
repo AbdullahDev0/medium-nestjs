@@ -55,4 +55,9 @@ export class GmailAccountController {
   async getWebhook(@Query() query: { code: string; state: string }) {
     return await this.gmailAccountService.getWebhook(query);
   }
+
+  @Get('sync/:account_id')
+  async syncMail(@Param('account_id') account_id: string) {
+    return await this.gmailAccountService.syncMail(account_id);
+  }
 }
