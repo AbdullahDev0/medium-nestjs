@@ -16,6 +16,9 @@
  * @method create - Endpoint for creating a new Gmail account.
  * @method update - Endpoint for updating an existing Gmail account by its ID.
  * @method getWebhook - Endpoint to handle webhook callbacks with query parameters.
+ * @method syncMail - Endpoint to sync Gmail account mails with local DB.
+ * @method moveToTrash - Endpoint to move email by account id and thread id to trash.
+ * @method restoreFromTrash - Endpoint to restore email by account id and thread id to trash.
  */
 
 import {
@@ -59,5 +62,24 @@ export class GmailAccountController {
   @Get('sync/:account_id')
   async syncMail(@Param('account_id') account_id: string) {
     return await this.gmailAccountService.syncMail(account_id);
+  }
+
+  @Get('trash/:account_id/:thread_id')
+  async moveToTrash(
+    @Param('account_id') account_id: string,
+    @Param('thread_id') thread_id: string,
+  ) {
+    return await this.gmailAccountService.moveToTrash(account_id, thread_id);
+  }
+
+  @Get('un-trash/:account_id/:thread_id')
+  async restoreFromTrash(
+    @Param('account_id') account_id: string,
+    @Param('thread_id') thread_id: string,
+  ) {
+    return await this.gmailAccountService.restoreFromTrash(
+      account_id,
+      thread_id,
+    );
   }
 }

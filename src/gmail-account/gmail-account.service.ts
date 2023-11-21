@@ -785,4 +785,97 @@ export class GmailAccountService {
       return [];
     }
   }
+
+  /**
+   * Moves a message to trash in Gmail and updates the database.
+   * @param id The user's identifier.
+   * @param threadId The identifier of the email thread.
+   */
+  async moveToTrash(
+    id: string,
+    threadId: string,
+  ): Promise<ResponseMessageInterface> {
+    try {
+      await this.updateGmailLabel(id, threadId, true);
+      await this.updateThreadRecord(threadId, true);
+      return customMessage(HttpStatus.OK, MESSAGE.SUCCESS);
+    } catch (error) {
+      console.error('Error in update:', error);
+      customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+    }
+  }
+
+  /**
+   * Restores a message from the trash in Gmail and updates the database.
+   * @param id The user's identifier.
+   * @param threadId The identifier of the email thread.
+   */
+  async restoreFromTrash(
+    id: string,
+    threadId: string,
+  ): Promise<ResponseMessageInterface> {
+    try {
+      await this.updateGmailLabel(id, threadId, false);
+      await this.updateThreadRecord(threadId, false);
+      return customMessage(HttpStatus.OK, MESSAGE.SUCCESS);
+    } catch (error) {
+      console.error('Error in update:', error);
+      customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+    }
+  }
+  /**
+   * Updates the Gmail label by trashing or untrashing the email.
+   * @param userId The user's identifier.
+   * @param threadId The identifier of the email thread.
+   * @param isTrash Indicates if the operation is trashing or untrashing.
+   */
+  private async updateGmailLabel(
+    userId: string,
+    threadId: string,
+    isTrash: boolean,
+  ): Promise<void> {
+    const oAuth2Client = await this.prepareOAuthClient(userId);
+    if (!oAuth2Client) {
+      throw new Error('OAuth2 client initialization failed');
+    }
+
+    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+
+    if (isTrash) {
+      await gmail.users.messages.trash({ userId: 'me', id: threadId });
+      return;
+    }
+
+    await gmail.users.messages.untrash({ userId: 'me', id: threadId });
+  }
+
+  /**
+   * Updates the database record for a Gmail thread.
+   * @param threadId The identifier of the email thread.
+   * @param isTrash Indicates if the operation is trashing or untrashing.
+   */
+  private async updateThreadRecord(
+    threadId: string,
+    isTrash: boolean,
+  ): Promise<void> {
+    const thread = await this.gmailThreadRepository.findOne({
+      where: { thread_id: threadId },
+    });
+    if (!thread) {
+      throw new Error('Thread not found');
+    }
+
+    const labelIds = new Set(thread.label_ids);
+    if (isTrash) {
+      labelIds.add('TRASH');
+    } else {
+      labelIds.delete('TRASH');
+      labelIds.add('INBOX');
+    }
+
+    await this.gmailThreadRepository.update(
+      { thread_id: threadId },
+      { label_ids: Array.from(labelIds) },
+    );
+  }
 }
