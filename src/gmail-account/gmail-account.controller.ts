@@ -19,6 +19,8 @@
  * @method syncMail - Endpoint to sync Gmail account mails with local DB.
  * @method moveToTrash - Endpoint to move email by account id and thread id to trash.
  * @method restoreFromTrash - Endpoint to restore email by account id and thread id to trash.
+ * @method markEmailAsRead - Endpoint to mark email as read by account id and thread id to trash.
+ * @method markEmailAsUnread - Endpoint to mark email as un-read by account id and thread id to trash.
  */
 
 import {
@@ -78,6 +80,28 @@ export class GmailAccountController {
     @Param('thread_id') thread_id: string,
   ) {
     return await this.gmailAccountService.restoreFromTrash(
+      account_id,
+      thread_id,
+    );
+  }
+
+  @Get('read/:account_id/:thread_id')
+  async markEmailAsRead(
+    @Param('account_id') account_id: string,
+    @Param('thread_id') thread_id: string,
+  ) {
+    return await this.gmailAccountService.markEmailAsRead(
+      account_id,
+      thread_id,
+    );
+  }
+
+  @Get('un-read/:account_id/:thread_id')
+  async markEmailAsUnread(
+    @Param('account_id') account_id: string,
+    @Param('thread_id') thread_id: string,
+  ) {
+    return await this.gmailAccountService.markEmailAsUnread(
       account_id,
       thread_id,
     );
