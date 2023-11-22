@@ -797,7 +797,7 @@ export class GmailAccountService {
   ): Promise<ResponseMessageInterface> {
     try {
       await this.updateGmailLabel(id, threadId, true);
-      await this.updateThreadRecord(threadId, true);
+      await this.updateThreadRecord(threadId, {}, true);
       return customMessage(HttpStatus.OK, MESSAGE.SUCCESS);
     } catch (error) {
       console.error('Error in update:', error);
@@ -816,7 +816,7 @@ export class GmailAccountService {
   ): Promise<ResponseMessageInterface> {
     try {
       await this.updateGmailLabel(id, threadId, false);
-      await this.updateThreadRecord(threadId, false);
+      await this.updateThreadRecord(threadId, {}, false);
       return customMessage(HttpStatus.OK, MESSAGE.SUCCESS);
     } catch (error) {
       console.error('Error in update:', error);
@@ -851,12 +851,15 @@ export class GmailAccountService {
 
   /**
    * Updates the database record for a Gmail thread.
+   * This method handles both label changes and trashing/untrashing logic.
    * @param threadId The identifier of the email thread.
-   * @param isTrash Indicates if the operation is trashing or untrashing.
+   * @param labelChanges Object specifying labels to add or remove.
+   * @param isTrash Optional parameter to indicate trashing or untrashing.
    */
   private async updateThreadRecord(
     threadId: string,
-    isTrash: boolean,
+    labelChanges: { add?: string[]; remove?: string[] },
+    isTrash?: boolean,
   ): Promise<void> {
     const thread = await this.gmailThreadRepository.findOne({
       where: { thread_id: threadId },
@@ -866,16 +869,94 @@ export class GmailAccountService {
     }
 
     const labelIds = new Set(thread.label_ids);
-    if (isTrash) {
-      labelIds.add('TRASH');
-    } else {
-      labelIds.delete('TRASH');
-      labelIds.add('INBOX');
+
+    // Handle label changes
+    labelChanges.remove?.forEach((label) => labelIds.delete(label));
+    labelChanges.add?.forEach((label) => labelIds.add(label));
+
+    // Handle trashing logic
+    if (isTrash !== undefined) {
+      if (isTrash) {
+        labelIds.add('TRASH');
+        labelIds.delete('INBOX');
+      } else {
+        labelIds.delete('TRASH');
+        labelIds.add('INBOX');
+      }
     }
 
     await this.gmailThreadRepository.update(
       { thread_id: threadId },
       { label_ids: Array.from(labelIds) },
     );
+  }
+
+  /**
+   * Updates read status in Gmail.
+   * @param oAuth2Client OAuth2Client instance.
+   * @param threadID Identifier of the email thread.
+   * @param modifyAction Object specifying labels to add or remove.
+   */
+  private async updateReadStatus(
+    oAuth2Client: OAuth2Client,
+    threadID: string,
+    modifyAction: { removeLabelIds?: string[]; addLabelIds?: string[] },
+  ): Promise<void> {
+    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+    await gmail.users.messages.modify({
+      userId: 'me',
+      id: threadID,
+      requestBody: modifyAction,
+    });
+  }
+
+  /**
+   * Marks an email as read.
+   * @param id User identifier.
+   * @param threadId Email thread identifier.
+   */
+  public async markEmailAsRead(
+    id: string,
+    threadId: string,
+  ): Promise<ResponseMessageInterface> {
+    try {
+      const token = await this.getToken(id);
+      if (token) {
+        const oAuth2Client = getOAuthClient(token);
+        await this.updateReadStatus(oAuth2Client, threadId, {
+          removeLabelIds: ['UNREAD'],
+        });
+        await this.updateThreadRecord(threadId, { remove: ['UNREAD'] });
+        return customMessage(HttpStatus.OK, MESSAGE.SUCCESS);
+      }
+    } catch (error) {
+      console.error('Error in markEmailAsRead:', error);
+      customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+    }
+  }
+
+  /**
+   * Marks an email as unread.
+   * @param id User identifier.
+   * @param threadId Email thread identifier.
+   */
+  public async markEmailAsUnread(
+    id: string,
+    threadId: string,
+  ): Promise<ResponseMessageInterface> {
+    try {
+      const token = await this.getToken(id);
+      if (token) {
+        const oAuth2Client = getOAuthClient(token);
+        await this.updateReadStatus(oAuth2Client, threadId, {
+          addLabelIds: ['UNREAD'],
+        });
+        await this.updateThreadRecord(threadId, { add: ['UNREAD'] });
+        return customMessage(HttpStatus.OK, MESSAGE.SUCCESS);
+      }
+    } catch (error) {
+      console.error('Error in markEmailAsUnread:', error);
+      customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+    }
   }
 }
