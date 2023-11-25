@@ -20,6 +20,11 @@ import { MESSAGE } from '../shared/utils/constants';
 import { OAuth2Client } from 'google-auth-library';
 import { gmail_v1, google } from 'googleapis';
 import { GmailThreads } from './entities/gmail-thread.entity';
+import { Response } from 'express';
+import { DownloadAttachmentDto } from './dtos/download-attachment.dto';
+import fetch from 'node-fetch';
+import { Buffer } from 'buffer';
+import { Transform } from 'stream';
 
 @Injectable()
 export class GmailAccountService {
@@ -957,6 +962,74 @@ export class GmailAccountService {
     } catch (error) {
       console.error('Error in markEmailAsUnread:', error);
       customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+    }
+  }
+
+  /**
+   * Downloads an email attachment and sends it as a response.
+   * @param id User identifier.
+   * @param url Attachment URL.
+   * @param response Express response object.
+   * @returns ResponseMessageInterface for errors
+   */
+  public async downloadAttachment(
+    accountId: string,
+    downloadAttachmentDto: DownloadAttachmentDto,
+    response: Response,
+  ): Promise<ResponseMessageInterface | void> {
+    try {
+      const token = await this.validToken(accountId);
+      if (!token) {
+        return customMessage(HttpStatus.UNAUTHORIZED, MESSAGE.UNAUTHORIZED);
+      }
+      const headers = {
+        Authorization: `Bearer ${token.access_token}`,
+        'User-Agent': 'medium-nestjs',
+      };
+
+      const fetchResponse = await fetch(downloadAttachmentDto.url, {
+        method: 'GET',
+        headers: headers,
+      });
+
+      if (!fetchResponse.ok) {
+        return customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+      }
+
+      response.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${downloadAttachmentDto.filename}"`,
+      );
+      response.setHeader(
+        'Content-Type',
+        downloadAttachmentDto.mimeType || 'application/octet-stream',
+      );
+
+      let responseObj = '';
+      const transformStream = new Transform({
+        transform(chunk, encoding, callback) {
+          const data = chunk.toString().replace(/-/g, '+').replace(/_/g, '/');
+          responseObj += data;
+          callback();
+        },
+      });
+
+      fetchResponse.body.pipe(transformStream).on('finish', () => {
+        response.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${downloadAttachmentDto.filename}"`,
+        );
+        response.setHeader(
+          'Content-Type',
+          downloadAttachmentDto.mimeType || 'application/octet-stream',
+        );
+        const base64Data = JSON.parse(responseObj).data;
+        response.status(HttpStatus.OK);
+        response.send(Buffer.from(base64Data, 'base64'));
+      });
+    } catch (error) {
+      console.error('Error downloading the attachment:', error);
+      return customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
     }
   }
 }

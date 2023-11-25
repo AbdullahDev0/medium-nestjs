@@ -9,8 +9,10 @@ export const GMAIL_CREDS = 'gmail_creds.json';
  *
  * MESSAGE.BAD_REQUEST - Used for indicating a bad or invalid request.
  * MESSAGE.SUCCESS - Used to indicate successful completion of an operation.
+ * MESSAGE.UNAUTHORIZED - Used to indicate that user is not authorized for this operation.
  */
 export enum MESSAGE {
   BAD_REQUEST = 'bad request',
   SUCCESS = 'success',
+  UNAUTHORIZED = 'user is not authorized',
 }
