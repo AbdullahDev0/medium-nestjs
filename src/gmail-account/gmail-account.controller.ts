@@ -34,11 +34,14 @@ import {
   Get,
   Query,
   UseFilters,
+  Res,
 } from '@nestjs/common';
 import { GmailAccountService } from './gmail-account.service';
 import { CreateGmailAccountDto } from './dtos/create-gmail-account.dto';
 import { UpdateGmailAccountDto } from './dtos/update-gmail-account.dto';
 import { HttpExceptionFilter } from '../shared/filters/http-exception.filter';
+import { Response } from 'express';
+import { DownloadAttachmentDto } from './dtos/download-attachment.dto';
 
 @UseFilters(HttpExceptionFilter)
 @UsePipes(ValidationPipe)
@@ -104,6 +107,19 @@ export class GmailAccountController {
     return await this.gmailAccountService.markEmailAsUnread(
       account_id,
       thread_id,
+    );
+  }
+
+  @Post('download-attachment/:account_id')
+  async downloadAttachment(
+    @Param('account_id') accountId: string,
+    @Body() downloadAttachmentDto: DownloadAttachmentDto,
+    @Res() response: Response,
+  ) {
+    return this.gmailAccountService.downloadAttachment(
+      accountId,
+      downloadAttachmentDto,
+      response,
     );
   }
 }
