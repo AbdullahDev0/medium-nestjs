@@ -21,6 +21,8 @@
  * @method restoreFromTrash - Endpoint to restore email by account id and thread id to trash.
  * @method markEmailAsRead - Endpoint to mark email as read by account id and thread id to trash.
  * @method markEmailAsUnread - Endpoint to mark email as un-read by account id and thread id to trash.
+ * @method downloadAttachment - Endpoint to allow downloading attachment by account id and attachment properties.
+ * @method sendMail - Endpoint to send email.
  */
 
 import {
@@ -35,6 +37,10 @@ import {
   Query,
   UseFilters,
   Res,
+  UploadedFiles,
+  UseInterceptors,
+  BadRequestException,
+  HttpStatus,
 } from '@nestjs/common';
 import { GmailAccountService } from './gmail-account.service';
 import { CreateGmailAccountDto } from './dtos/create-gmail-account.dto';
@@ -42,6 +48,10 @@ import { UpdateGmailAccountDto } from './dtos/update-gmail-account.dto';
 import { HttpExceptionFilter } from '../shared/filters/http-exception.filter';
 import { Response } from 'express';
 import { DownloadAttachmentDto } from './dtos/download-attachment.dto';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { SendEmailDto } from './dtos/send-email.dto';
+import customMessage from '../shared/responses/customMessage.response';
+import { MESSAGE } from '../shared/utils/constants';
 
 @UseFilters(HttpExceptionFilter)
 @UsePipes(ValidationPipe)
@@ -121,5 +131,42 @@ export class GmailAccountController {
       downloadAttachmentDto,
       response,
     );
+  }
+
+  @Post(':account_id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'files', maxCount: 10 }]))
+  async sendMail(
+    @Param('account_id') account_id: string,
+    @Body() sendEmailDto: SendEmailDto,
+    @UploadedFiles() files: { files?: Express.Multer.File[] },
+    @Res() response: Response,
+  ) {
+    // Check the accumulative size of the files
+    const totalSize = (files.files || []).reduce(
+      (sum, file) => sum + file.size,
+      0,
+    );
+    if (totalSize > 25 * 1024 * 1024) {
+      // 25 MB in bytes
+      throw new BadRequestException(
+        customMessage(
+          HttpStatus.BAD_REQUEST,
+          MESSAGE.FILE_SIZE_EXCEPTION_MESSAGE,
+        ),
+      );
+    }
+
+    // If the size is within limits, proceed with the service call
+    const emailAttachments: Express.Multer.File[] = files?.files || [];
+    // Manuallay handle success response
+    response
+      .status(HttpStatus.OK)
+      .send(
+        await this.gmailAccountService.sendEmail(
+          account_id,
+          sendEmailDto,
+          emailAttachments,
+        ),
+      );
   }
 }
