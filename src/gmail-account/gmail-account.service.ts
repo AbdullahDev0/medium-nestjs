@@ -25,6 +25,7 @@ import { DownloadAttachmentDto } from './dtos/download-attachment.dto';
 import fetch from 'node-fetch';
 import { Buffer } from 'buffer';
 import { Transform } from 'stream';
+import { SendEmailDto } from './dtos/send-email.dto';
 
 @Injectable()
 export class GmailAccountService {
@@ -217,17 +218,12 @@ export class GmailAccountService {
   ): Promise<ResponseMessageInterface> {
     try {
       const oAuth2Client = await this.prepareOAuthClient(id);
-      if (!oAuth2Client) throw new Error('OAuth2 client preparation failed');
-
+      if (!oAuth2Client) throw new Error(MESSAGE.BAD_REQUEST);
       const data =
         page === 1
           ? await this.syncLatestThreads(id, oAuth2Client, pageSize)
           : await this.syncOlderThreads(id, oAuth2Client, page, pageSize);
-      return customMessage(
-        HttpStatus.OK,
-        'Gmail account updated successfully.',
-        data,
-      );
+      return customMessage(HttpStatus.OK, MESSAGE.SUCCESS, data);
     } catch (error) {
       console.error('Error in syncMail:', error);
       return customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
@@ -562,7 +558,7 @@ export class GmailAccountService {
       await this.gmailThreadRepository.save(threadDetails);
     } catch (error) {
       console.error('Error in createBulk:', error);
-      throw error;
+      throw new Error(MESSAGE.BAD_REQUEST);
     }
   }
 
@@ -841,7 +837,7 @@ export class GmailAccountService {
   ): Promise<void> {
     const oAuth2Client = await this.prepareOAuthClient(userId);
     if (!oAuth2Client) {
-      throw new Error('OAuth2 client initialization failed');
+      throw new Error(MESSAGE.BAD_REQUEST);
     }
 
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
@@ -870,7 +866,7 @@ export class GmailAccountService {
       where: { thread_id: threadId },
     });
     if (!thread) {
-      throw new Error('Thread not found');
+      throw new Error(MESSAGE.BAD_REQUEST);
     }
 
     const labelIds = new Set(thread.label_ids);
@@ -920,7 +916,7 @@ export class GmailAccountService {
    * @param id User identifier.
    * @param threadId Email thread identifier.
    */
-  public async markEmailAsRead(
+  async markEmailAsRead(
     id: string,
     threadId: string,
   ): Promise<ResponseMessageInterface> {
@@ -945,7 +941,7 @@ export class GmailAccountService {
    * @param id User identifier.
    * @param threadId Email thread identifier.
    */
-  public async markEmailAsUnread(
+  async markEmailAsUnread(
     id: string,
     threadId: string,
   ): Promise<ResponseMessageInterface> {
@@ -972,7 +968,7 @@ export class GmailAccountService {
    * @param response Express response object.
    * @returns ResponseMessageInterface for errors
    */
-  public async downloadAttachment(
+  async downloadAttachment(
     accountId: string,
     downloadAttachmentDto: DownloadAttachmentDto,
     response: Response,
@@ -1031,5 +1027,210 @@ export class GmailAccountService {
       console.error('Error downloading the attachment:', error);
       return customMessage(HttpStatus.BAD_REQUEST, MESSAGE.BAD_REQUEST);
     }
+  }
+
+  /**
+   * Send an email with the given parameters and attachments.
+   * @param id - Identifier for the Gmail account.
+   * @param reqBody - The body of the request containing email fields.
+   * @param attachments - Array of files to be attached to the email.
+   * @returns The API response from sending the email.
+   */
+  async sendEmail(
+    id: string,
+    reqBody: SendEmailDto,
+    attachments: Express.Multer.File[],
+  ): Promise<ResponseMessageInterface> {
+    const token = await this.getToken(id);
+    if (!token) {
+      return customMessage(HttpStatus.UNAUTHORIZED, MESSAGE.UNAUTHORIZED);
+    }
+    const user = await this.getUser(id);
+    const from = this.formatSender(user);
+
+    const oAuth2Client = getOAuthClient(token);
+    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+
+    const rawEmail = this.createRawEmail(
+      from,
+      reqBody.to,
+      attachments,
+      reqBody.subject,
+      reqBody.body,
+      reqBody.cc,
+      reqBody.bcc,
+    );
+
+    return customMessage(
+      HttpStatus.OK,
+      MESSAGE.SUCCESS,
+      await this.sendRawEmail(gmail, rawEmail),
+    );
+  }
+
+  /**
+   * Get user details from the repository.
+   * @param id - Identifier for the Gmail account.
+   * @returns The user entity.
+   */
+  private async getUser(id: string): Promise<GmailAccounts> {
+    const user = await this.gmailAccountRepository.findOneBy({ id });
+    if (!user) throw new Error(MESSAGE.USER_NOT_FOUND);
+    return user;
+  }
+
+  /**
+   * Format the 'from' field for the email.
+   * @param user - The Gmail user entity.
+   * @returns The formatted 'from' string.
+   */
+  private formatSender(user: GmailAccounts): string {
+    return `${user.full_name} <${user.email}>`;
+  }
+
+  /**
+   * Send the raw email using the Gmail API.
+   * @param gmail - The Gmail API client.
+   * @param rawEmail - The raw email data in base64 format.
+   * @returns The API response from sending the email.
+   */
+  private async sendRawEmail(
+    gmail: gmail_v1.Gmail,
+    rawEmail: string,
+  ): Promise<gmail_v1.Schema$Message> {
+    try {
+      const response = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: {
+          raw: rawEmail,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error sending email: ' + error.message);
+      throw new Error(MESSAGE.BAD_REQUEST);
+    }
+  }
+
+  /**
+   * Creates a raw email message ready to be sent via the Gmail API.
+   *
+   * @param from - The email address of the sender.
+   * @param to - The recipient(s) email address(es).
+   * @param subject - The subject line of the email.
+   * @param body - The HTML body of the email.
+   * @param attachments - An array of attachments to be included in the email.
+   * @param cc - Optional CC recipient(s).
+   * @param bcc - Optional BCC recipient(s).
+   * @returns The raw email string in base64 format.
+   */
+  private createRawEmail(
+    from: string,
+    to: string | string[],
+    attachments: Express.Multer.File[],
+    subject?: string,
+    body?: string,
+    cc?: string | string[],
+    bcc?: string | string[],
+  ): string {
+    const utf8Subject = this.encodeSubject(subject);
+    const messageParts = [
+      this.formatHeader(from, to, utf8Subject),
+      ...this.addCcBcc(cc, bcc),
+      '--foo_bar_baz',
+      'Content-Type: text/html; charset=utf-8',
+      'MIME-Version: 1.0',
+      '',
+      body,
+      ...this.addAttachments(attachments),
+      '--foo_bar_baz--',
+    ];
+
+    return this.encodeEmail(messageParts.join('\n'));
+  }
+
+  /**
+   * Encodes the subject of the email to UTF-8.
+   *
+   * @param subject - The subject line of the email.
+   * @returns The UTF-8 encoded subject.
+   */
+  private encodeSubject(subject: string): string {
+    return `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
+  }
+
+  /**
+   * Formats the email header section.
+   *
+   * @param from - The email address of the sender.
+   * @param to - The recipient(s) email address(es).
+   * @param utf8Subject - The UTF-8 encoded subject line.
+   * @returns An array of header strings.
+   */
+  private formatHeader(
+    from: string,
+    to: string | string[],
+    utf8Subject: string,
+  ): string {
+    return [
+      `From: ${from}`,
+      `To: ${Array.isArray(to) ? to.join(', ') : to}`,
+      'Content-Type: multipart/mixed; boundary="foo_bar_baz"',
+      'MIME-Version: 1.0',
+      `Subject: ${utf8Subject}`,
+      '',
+    ].join('\n');
+  }
+
+  /**
+   * Adds CC and BCC recipients to the email.
+   *
+   * @param cc - Optional CC recipient(s).
+   * @param bcc - Optional BCC recipient(s).
+   * @returns An array of CC and BCC header strings.
+   */
+  private addCcBcc(cc?: string | string[], bcc?: string | string[]): string[] {
+    const headers = [];
+    if (cc) {
+      headers.push(`Cc: ${Array.isArray(cc) ? cc.join(', ') : cc}`);
+    }
+    if (bcc) {
+      headers.push(`Bcc: ${Array.isArray(bcc) ? bcc.join(', ') : bcc}`);
+    }
+    return headers;
+  }
+
+  /**
+   * Adds attachments to the email.
+   *
+   * @param attachments - An array of attachments to be included in the email.
+   * @returns An array of attachment strings formatted for the raw email.
+   */
+  private addAttachments(attachments: Express.Multer.File[]): string[] {
+    return attachments.map((attachment) => {
+      const encodedContent = attachment.buffer.toString('base64');
+      return [
+        '--foo_bar_baz',
+        `Content-Type: ${attachment.mimetype}; name="${attachment.originalname}"`,
+        'Content-Transfer-Encoding: base64',
+        `Content-Disposition: attachment; filename="${attachment.originalname}"`,
+        '',
+        encodedContent,
+      ].join('\n');
+    });
+  }
+
+  /**
+   * Encodes the email body to base64 format, making it suitable for sending via the Gmail API.
+   *
+   * @param emailBody - The full raw email body string.
+   * @returns The base64 encoded email body.
+   */
+  private encodeEmail(emailBody: string): string {
+    return Buffer.from(emailBody)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
   }
 }
